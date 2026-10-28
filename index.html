@@ -1,0 +1,1809 @@
+<!-- ... existing code ... -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>PokéVault Terminal: Archival Dossier & Auction Simulator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;0,800;1,400&family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+            serif: ['Cinzel', 'serif']
+          },
+          colors: {
+            term: {
+              bg: '#0a0d14',
+              panel: '#101522',
+              plate: '#151b2c',
+              border: '#1f293d',
+              cyan: '#00f2fe',
+              emerald: '#38ef7d',
+              amber: '#f59e0b',
+              purple: '#c084fc',
+              muted: '#64748b'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    :root {
+      --sat: env(safe-area-inset-top, 0px);
+      --sab: env(safe-area-inset-bottom, 0px);
+      --sal: env(safe-area-inset-left, 0px);
+      --sar: env(safe-area-inset-right, 0px);
+    }
+
+    body {
+      background-color: #0a0d14;
+      color: #e2e8f0;
+      font-family: 'JetBrains Mono', monospace;
+      font-feature-settings: "tnum" 1, "zero" 1;
+      touch-action: manipulation;
+      -webkit-font-smoothing: antialiased;
+      padding-bottom: calc(4.75rem + var(--sab));
+    }
+
+    /* iOS viewport height fix */
+    .app-viewport {
+      min-height: 100dvh;
+    }
+
+    /* Prevent mobile double-tap zoom on inputs/buttons */
+    button, input, select {
+      font-size: 16px !important;
+      touch-action: manipulation;
+    }
+    @media (min-width: 640px) {
+      button, input, select {
+        font-size: 0.75rem !important;
+      }
+    }
+
+    .crt-grid {
+      background-size: 24px 24px;
+      background-image: 
+        linear-gradient(to right, rgba(0, 242, 254, 0.02) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0, 242, 254, 0.02) 1px, transparent 1px);
+    }
+
+    .slab-border {
+      border: 2px solid rgba(255, 255, 255, 0.22);
+      box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.8),
+                  inset 0 0 10px rgba(255, 255, 255, 0.06);
+    }
+
+    .holo-glow {
+      position: relative;
+    }
+    .holo-glow::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(0, 242, 254, 0.15), rgba(192, 132, 252, 0.15));
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body class="app-viewport flex flex-col crt-grid select-none antialiased">
+
+  <!-- TOP STATUS BAR -->
+  <header class="border-b border-term-border bg-term-panel/95 backdrop-blur sticky top-0 z-40 px-3 sm:px-4 py-2" style="padding-top: max(0.5rem, var(--sat));">
+    <div class="max-w-7xl mx-auto flex items-center justify-between gap-2">
+      <!-- Title & Archival Status -->
+      <div class="flex items-center gap-2">
+        <span class="px-1.5 py-0.5 rounded bg-sky-500/20 text-term-cyan border border-sky-500/30 text-[9px] font-bold tracking-widest uppercase">SYS.v5.0</span>
+        <div>
+          <h1 class="text-xs sm:text-sm font-extrabold tracking-tight text-white flex items-center gap-1.5">
+            POKÉ-VAULT <span class="text-term-cyan font-normal">::</span> ARCHIVE
+          </h1>
+        </div>
+      </div>
+
+      <!-- Financials & Quick Toggles -->
+      <div class="flex items-center gap-2">
+        <!-- God Mode indicator if enabled -->
+        <div id="godPill" class="hidden px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-[9px] text-amber-300 font-bold uppercase tracking-wider animate-pulse">
+          ⚡ GOD ACTIVE
+        </div>
+
+        <!-- Audio Mute -->
+        <button id="soundBtn" onclick="toggleSound()" class="px-2 py-1 rounded border border-slate-700 bg-slate-900 text-slate-300 hover:text-white transition">
+          <span id="soundLabel" class="text-[10px] font-bold">[SND]</span>
+        </button>
+
+        <!-- Balance -->
+        <div class="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded border border-emerald-500/30">
+          <span class="text-slate-400 text-[10px] hidden sm:inline">FUNDS:</span>
+          <span id="uiBalance" class="font-bold text-term-emerald tracking-wide font-mono text-xs sm:text-sm">$150.00</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN SCROLLABLE VIEWPORT -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-4 space-y-4 overflow-y-auto">
+
+    <!-- ================================================================= -->
+    <!-- TAB 1: BOOSTER PACK SHOP -->
+    <!-- ================================================================= -->
+    <section id="view-shop" class="space-y-4">
+      <div class="bg-term-panel border border-term-border p-3.5 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div>
+          <div class="text-[9px] text-term-cyan uppercase tracking-widest font-bold">REQUISITION TERMINAL</div>
+          <h2 class="text-xs sm:text-sm font-bold text-white">Vintage Booster Pack Archives (1999–2000)</h2>
+          <p class="text-[10px] text-slate-400">Yields 10 confidential specimens. Available in Unlimited and authentic 1st Edition.</p>
+        </div>
+        <div class="flex items-center gap-2 text-[11px] self-end sm:self-auto">
+          <span class="text-slate-400 text-[10px]">Opened: <strong id="shopPacksOpened" class="text-white">0</strong></span>
+          <button onclick="claimAllowance()" class="px-2.5 py-1 rounded bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/40 transition text-[10px] font-bold">
+            +$50 Grant
+          </button>
+        </div>
+      </div>
+
+      <!-- Pack Catalog Grid -->
+      <div id="packCatalogGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB 2: MASTER DOSSIER BINDER -->
+    <!-- ================================================================= -->
+    <section id="view-binder" class="space-y-4 hidden">
+      <!-- Binder Controls & Metrics -->
+      <div class="bg-term-panel border border-term-border p-3 rounded-xl flex flex-col sm:flex-row gap-2.5 items-start sm:items-center justify-between text-xs">
+        <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <select id="filterSet" onchange="renderBinderView()" class="bg-slate-900 text-slate-200 border border-slate-700 rounded px-2 py-1 outline-none flex-1 sm:flex-initial text-[11px]">
+            <option value="ALL">All Expansions</option>
+            <option value="Base Set">Base Set (1999)</option>
+            <option value="Jungle">Jungle (1999)</option>
+            <option value="Fossil">Fossil (1999)</option>
+            <option value="Team Rocket">Team Rocket (2000)</option>
+            <option value="Gym Heroes">Gym Heroes (2000)</option>
+            <option value="Neo Genesis">Neo Genesis (2000)</option>
+          </select>
+
+          <select id="filterEdition" onchange="renderBinderView()" class="bg-slate-900 text-slate-200 border border-slate-700 rounded px-2 py-1 outline-none text-[11px]">
+            <option value="ALL">All Prints</option>
+            <option value="1st Edition">1st Edition [★1ST]</option>
+            <option value="Unlimited">Unlimited</option>
+          </select>
+
+          <select id="filterGraded" onchange="renderBinderView()" class="bg-slate-900 text-slate-200 border border-slate-700 rounded px-2 py-1 outline-none text-[11px]">
+            <option value="ALL">All States</option>
+            <option value="RAW">Raw</option>
+            <option value="GRADED">Slabs</option>
+          </select>
+        </div>
+
+        <div class="text-right w-full sm:w-auto text-[11px] text-slate-400">
+          PORTFOLIO: <strong id="binderEstValue" class="text-term-emerald font-bold font-mono">$0.00</strong>
+        </div>
+      </div>
+
+      <!-- Set Progress Pills -->
+      <div id="setCompletionGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-[9px]">
+        <!-- Injected via JS -->
+      </div>
+
+      <!-- Dossier Cards Grid -->
+      <div id="binderGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB 3: AUTHENTICATION LAB & SLABS -->
+    <!-- ================================================================= -->
+    <section id="view-grading" class="space-y-4 hidden">
+      <div class="bg-term-panel border border-term-border p-3.5 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div>
+          <div class="flex items-center gap-1.5">
+            <span class="px-1.5 py-0.5 rounded bg-sky-500/20 text-term-cyan font-bold text-[8px] uppercase">PSA / BGS LABS</span>
+            <h2 class="text-xs sm:text-sm font-bold text-white uppercase">Ultrasonic Encasement</h2>
+          </div>
+          <p class="text-[10px] text-slate-400 mt-0.5 max-w-xl">
+            Centering, Surface, Edges, Corners subgrades determine grade 1 to 10. Gem Mint 10 on 1st Editions yields astronomical multiples.
+          </p>
+        </div>
+        <div class="text-right text-xs self-end sm:self-auto">
+          <span class="text-slate-400 block text-[9px]">SLABS HELD:</span>
+          <span id="labSlabCount" class="text-lg font-bold text-amber-400 font-mono">0</span>
+        </div>
+      </div>
+
+      <!-- Slabs Grid -->
+      <div class="space-y-2">
+        <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Encapsulated Vault</h3>
+        <div id="slabsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB 4: EXPANDED 3-LANE LIVE AUCTION FLOOR -->
+    <!-- ================================================================= -->
+    <section id="view-auction" class="space-y-4 hidden">
+      <div class="bg-term-panel border border-term-border p-3 rounded-xl flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div class="text-[9px] text-term-cyan uppercase tracking-widest font-bold">TRIPLE CONCURRENT AUCTION TERMINAL</div>
+          <h3 class="text-xs sm:text-sm font-bold text-white">3 Simultaneous Live Bidding Lanes</h3>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-[10px] text-slate-400 font-mono" id="auctionActiveCount">0 Lanes Active</span>
+        </div>
+      </div>
+
+      <!-- 3 AUCTION LANES CONTAINER -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <!-- LANE 1 -->
+        <div id="lane-card-0" class="bg-term-panel border border-term-border rounded-xl p-3 flex flex-col justify-between space-y-2.5">
+          <div class="flex justify-between items-center border-b border-term-border pb-1.5 text-xs">
+            <span class="font-bold text-term-cyan text-[11px] flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-term-cyan animate-pulse"></span> LANE A: PUBLIC FLOOR
+            </span>
+            <span id="lane-timer-0" class="text-[10px] font-mono text-slate-400 font-bold">STANDBY</span>
+          </div>
+
+          <!-- Lane Lot Container -->
+          <div id="lane-lot-0" class="bg-term-plate border border-slate-800 rounded-lg p-2.5 min-h-[160px] flex flex-col items-center justify-center text-center">
+            <p class="text-slate-500 text-[10px] italic">Lane idle. Queue any item below.</p>
+          </div>
+
+          <!-- Lane Log -->
+          <div class="bg-slate-950 p-2 rounded border border-slate-800 h-24 overflow-y-auto text-[9px] font-mono space-y-1" id="lane-log-0">
+            <div class="text-slate-600">// Floor ready.</div>
+          </div>
+
+          <div class="flex gap-2">
+            <button onclick="openLanePicker(0)" id="lane-btn-0" class="w-full py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700">
+              LIST IN LANE A
+            </button>
+          </div>
+        </div>
+
+        <!-- LANE 2 -->
+        <div id="lane-card-1" class="bg-term-panel border border-term-border rounded-xl p-3 flex flex-col justify-between space-y-2.5">
+          <div class="flex justify-between items-center border-b border-term-border pb-1.5 text-xs">
+            <span class="font-bold text-amber-400 text-[11px] flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> LANE B: PREMIER VAULT
+            </span>
+            <span id="lane-timer-1" class="text-[10px] font-mono text-slate-400 font-bold">STANDBY</span>
+          </div>
+
+          <!-- Lane Lot Container -->
+          <div id="lane-lot-1" class="bg-term-plate border border-slate-800 rounded-lg p-2.5 min-h-[160px] flex flex-col items-center justify-center text-center">
+            <p class="text-slate-500 text-[10px] italic">Lane idle. Queue any item below.</p>
+          </div>
+
+          <!-- Lane Log -->
+          <div class="bg-slate-950 p-2 rounded border border-slate-800 h-24 overflow-y-auto text-[9px] font-mono space-y-1" id="lane-log-1">
+            <div class="text-slate-600">// Vault ready.</div>
+          </div>
+
+          <div class="flex gap-2">
+            <button onclick="openLanePicker(1)" id="lane-btn-1" class="w-full py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700">
+              LIST IN LANE B
+            </button>
+          </div>
+        </div>
+
+        <!-- LANE 3 -->
+        <div id="lane-card-2" class="bg-term-panel border border-term-border rounded-xl p-3 flex flex-col justify-between space-y-2.5">
+          <div class="flex justify-between items-center border-b border-term-border pb-1.5 text-xs">
+            <span class="font-bold text-purple-400 text-[11px] flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span> LANE C: HIGH-ROLLER
+            </span>
+            <span id="lane-timer-2" class="text-[10px] font-mono text-slate-400 font-bold">STANDBY</span>
+          </div>
+
+          <!-- Lane Lot Container -->
+          <div id="lane-lot-2" class="bg-term-plate border border-slate-800 rounded-lg p-2.5 min-h-[160px] flex flex-col items-center justify-center text-center">
+            <p class="text-slate-500 text-[10px] italic">Lane idle. Queue any item below.</p>
+          </div>
+
+          <!-- Lane Log -->
+          <div class="bg-slate-950 p-2 rounded border border-slate-800 h-24 overflow-y-auto text-[9px] font-mono space-y-1" id="lane-log-2">
+            <div class="text-slate-600">// High-Roller ready.</div>
+          </div>
+
+          <div class="flex gap-2">
+            <button onclick="openLanePicker(2)" id="lane-btn-2" class="w-full py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700">
+              LIST IN LANE C
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB 5: LEDGER & METRICS -->
+    <!-- ================================================================= -->
+    <section id="view-ledger" class="space-y-4 hidden">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+        <div class="bg-term-panel border border-term-border p-3 rounded-xl">
+          <div class="text-slate-500 text-[9px] uppercase">Balance</div>
+          <div id="metricBalance" class="text-base sm:text-lg font-bold text-term-emerald mt-0.5">$150.00</div>
+        </div>
+        <div class="bg-term-panel border border-term-border p-3 rounded-xl">
+          <div class="text-slate-500 text-[9px] uppercase">Best Sale</div>
+          <div id="metricTopSale" class="text-base sm:text-lg font-bold text-amber-400 mt-0.5">$0.00</div>
+        </div>
+        <div class="bg-term-panel border border-term-border p-3 rounded-xl">
+          <div class="text-slate-500 text-[9px] uppercase">Pristine 10s</div>
+          <div id="metricGemMint" class="text-base sm:text-lg font-bold text-term-cyan mt-0.5">0</div>
+        </div>
+        <div class="bg-term-panel border border-term-border p-3 rounded-xl">
+          <div class="text-slate-500 text-[9px] uppercase">Holdings</div>
+          <div id="metricDossiersHeld" class="text-base sm:text-lg font-bold text-purple-400 mt-0.5">0</div>
+        </div>
+      </div>
+
+      <!-- Historical Settlement Ledger -->
+      <div class="bg-term-panel border border-term-border rounded-xl p-3 space-y-2 font-mono text-xs">
+        <div class="flex justify-between items-center">
+          <h3 class="font-bold text-white text-[11px] uppercase tracking-wider">Settlement Ledger</h3>
+          <span class="text-[10px] text-slate-400" id="ledgerCount">0 Settlements</span>
+        </div>
+        <div class="overflow-x-auto max-h-72 overflow-y-auto">
+          <table class="w-full text-left text-[11px]">
+            <thead>
+              <tr class="border-b border-slate-800 text-slate-500 text-[9px] uppercase">
+                <th class="py-1.5 px-2">Time</th>
+                <th class="py-1.5 px-2">Item</th>
+                <th class="py-1.5 px-2">Expansion</th>
+                <th class="py-1.5 px-2">Condition</th>
+                <th class="py-1.5 px-2 text-right">Settled</th>
+              </tr>
+            </thead>
+            <tbody id="ledgerTableBody">
+              <tr>
+                <td colspan="5" class="py-6 text-center text-slate-600 italic">No ledger entries.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB 6: GOD MODE CONTROL MATRIX -->
+    <!-- ================================================================= -->
+    <section id="view-god" class="space-y-4 hidden font-mono">
+      <div class="bg-amber-950/20 border border-amber-500/40 p-3.5 rounded-xl flex items-center justify-between">
+        <div>
+          <div class="text-[9px] text-amber-400 uppercase tracking-widest font-bold">DEVELOPER & DEBUG MATRIX</div>
+          <h3 class="text-xs sm:text-sm font-bold text-amber-300">Omnipotent God Mode Controls</h3>
+          <p class="text-[10px] text-slate-400 mt-0.5">Override RNG seeds, manipulate cash reserves, and spawn holy grails.</p>
+        </div>
+        <span class="text-xl">⚡</span>
+      </div>
+
+      <!-- God Action Buttons -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+        <!-- Cash Grants -->
+        <div class="bg-term-panel border border-term-border p-3 rounded-xl space-y-2">
+          <div class="text-[10px] text-term-cyan uppercase font-bold">CAPITAL INJECTIONS</div>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="godAddCash(100000)" class="py-2 px-2 rounded bg-emerald-950/60 border border-emerald-500/50 hover:bg-emerald-900/60 text-emerald-300 font-bold transition">
+              +$100,000 Cash
+            </button>
+            <button onclick="godAddCash(1000000)" class="py-2 px-2 rounded bg-emerald-950/60 border border-emerald-500/50 hover:bg-emerald-900/60 text-emerald-300 font-bold transition">
+              +$1,000,000 Cash
+            </button>
+          </div>
+        </div>
+
+        <!-- Grade 10 Override -->
+        <div class="bg-term-panel border border-term-border p-3 rounded-xl space-y-2">
+          <div class="text-[10px] text-amber-400 uppercase font-bold">GRADING PROTOCOL OVERRIDE</div>
+          <button onclick="godToggleAuto10()" id="btnGodAuto10" class="w-full py-2 px-3 rounded bg-slate-900 border border-slate-700 hover:border-amber-400 text-slate-300 font-bold transition flex justify-between items-center">
+            <span>Force 10.0 Gem Mint</span>
+            <span id="godAuto10Status" class="text-slate-500 font-bold">[OFF]</span>
+          </button>
+        </div>
+
+        <!-- Holy Grail Spawns -->
+        <div class="bg-term-panel border border-term-border p-3 rounded-xl space-y-2">
+          <div class="text-[10px] text-purple-400 uppercase font-bold">SPAWN HOLY GRAILS</div>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="godSpawnGrail('charizard')" class="py-2 px-2 rounded bg-slate-900 border border-purple-500/40 hover:bg-slate-800 text-purple-200 font-bold transition text-[10px]">
+              ★ 1st Ed Charizard 10
+            </button>
+            <button onclick="godSpawnGrail('lugia')" class="py-2 px-2 rounded bg-slate-900 border border-purple-500/40 hover:bg-slate-800 text-purple-200 font-bold transition text-[10px]">
+              ★ 1st Ed Lugia 10
+            </button>
+          </div>
+        </div>
+
+        <!-- Spawn God Pack -->
+        <div class="bg-term-panel border border-term-border p-3 rounded-xl space-y-2">
+          <div class="text-[10px] text-term-cyan uppercase font-bold">GOD PACK INJECTION</div>
+          <button onclick="godSpawnGodPack()" class="w-full py-2 px-3 rounded bg-sky-950/50 border border-sky-500/50 hover:bg-sky-900/50 text-term-cyan font-bold transition flex justify-between items-center">
+            <span>Spawn 10x 1st Ed Holo Pack</span>
+            <span class="text-amber-400 text-xs">★ ★ ★</span>
+          </button>
+        </div>
+
+        <!-- Instant Auction Finisher -->
+        <div class="bg-term-panel border border-term-border p-3 rounded-xl space-y-2 sm:col-span-2">
+          <div class="text-[10px] text-slate-400 uppercase font-bold">AUCTION ACCELERATION & RESET</div>
+          <div class="flex flex-wrap gap-2">
+            <button onclick="godInstantFinishAuctions()" class="py-2 px-3 rounded bg-slate-900 border border-slate-700 hover:border-slate-500 text-slate-300 font-bold transition">
+              ⚡ Hammer All Active Lanes Instantly
+            </button>
+            <button onclick="confirmReset()" class="py-2 px-3 rounded bg-red-950/40 border border-red-500/40 hover:bg-red-900/40 text-rose-400 font-bold transition">
+              Wipe Save & Reset
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===================================================================== -->
+  <!-- BOTTOM-AFFIXED THUMB DOCK (iOS & MOBILE OPTIMIZED) -->
+  <!-- ===================================================================== -->
+  <footer class="fixed bottom-0 inset-x-0 z-40 bg-term-panel/95 backdrop-blur border-t border-term-border" style="padding-bottom: max(0.25rem, var(--sab));">
+    <div class="max-w-7xl mx-auto flex items-center justify-around text-center font-mono">
+      <button onclick="navigateTab('shop')" id="dock-shop" class="dock-btn flex-1 py-2 px-1 text-term-cyan flex flex-col items-center gap-0.5">
+        <span class="text-sm">📦</span>
+        <span class="text-[9px] font-bold tracking-tight">PROCURE</span>
+      </button>
+
+      <button onclick="navigateTab('binder')" id="dock-binder" class="dock-btn flex-1 py-2 px-1 text-slate-400 hover:text-slate-200 flex flex-col items-center gap-0.5">
+        <span class="text-sm">🗂️</span>
+        <span class="text-[9px] font-bold tracking-tight">BINDER (<span id="dockCountBinder">0</span>)</span>
+      </button>
+
+      <button onclick="navigateTab('grading')" id="dock-grading" class="dock-btn flex-1 py-2 px-1 text-slate-400 hover:text-slate-200 flex flex-col items-center gap-0.5">
+        <span class="text-sm">🔬</span>
+        <span class="text-[9px] font-bold tracking-tight">LAB (<span id="dockCountGraded">0</span>)</span>
+      </button>
+
+      <button onclick="navigateTab('auction')" id="dock-auction" class="dock-btn flex-1 py-2 px-1 text-slate-400 hover:text-slate-200 flex flex-col items-center gap-0.5">
+        <span class="text-sm">🏛️</span>
+        <span class="text-[9px] font-bold tracking-tight">3-LANE</span>
+      </button>
+
+      <button onclick="navigateTab('ledger')" id="dock-ledger" class="dock-btn flex-1 py-2 px-1 text-slate-400 hover:text-slate-200 flex flex-col items-center gap-0.5">
+        <span class="text-sm">📊</span>
+        <span class="text-[9px] font-bold tracking-tight">LEDGER</span>
+      </button>
+
+      <button onclick="navigateTab('god')" id="dock-god" class="dock-btn flex-1 py-2 px-1 text-amber-500/70 hover:text-amber-400 flex flex-col items-center gap-0.5">
+        <span class="text-sm">⚡</span>
+        <span class="text-[9px] font-bold tracking-tight">GOD</span>
+      </button>
+    </div>
+  </footer>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL: LANE ITEM PICKER -->
+  <!-- ===================================================================== -->
+  <div id="modalLanePicker" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 hidden">
+    <div class="bg-term-panel border border-term-border rounded-xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+      <div class="border-b border-term-border p-3 flex justify-between items-center bg-term-plate">
+        <span class="text-xs font-bold text-white uppercase tracking-wider" id="lanePickerTitle">ASSIGN LOT TO LANE</span>
+        <button onclick="closeLanePicker()" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-xs">[X]</button>
+      </div>
+      <div class="p-3 overflow-y-auto space-y-2 flex-1" id="lanePickerItems">
+        <!-- Injected by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ... existing code ... -->
+  <!-- MODAL: TEXT PACK OPENING MANIFEST -->
+  <!-- ... existing code ... -->
+  <!-- MODAL: DOSSIER INSPECTOR & ACTION PANEL -->
+  <!-- ... existing code ... -->
+  <!-- TOAST FEEDBACK NOTIFICATION -->
+  <!-- ... existing code ... -->
+
+  <!-- SOUND SYNTHESIZER & GAME ENGINE LOGIC -->
+  <script>
+    /* =========================================================================
+       AUDIO SYNTHESIZER (Pure Web Audio API - Safe for iOS user unlocks)
+       ========================================================================= */
+    class AudioEngine {
+      constructor() {
+        this.ctx = null;
+        this.muted = false;
+      }
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+      beep(freq = 440, type = 'sine', duration = 0.08, gainVal = 0.2) {
+        if (this.muted) return;
+        this.init();
+        try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+          gain.gain.setValueAtTime(gainVal, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + duration);
+        } catch(e) {}
+      }
+      playTear() {
+        if (this.muted) return;
+        this.init();
+        try {
+          const bufferSize = this.ctx.sampleRate * 0.25;
+          const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+          const data = buffer.getChannelData(0);
+          for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+          const noise = this.ctx.createBufferSource();
+          noise.buffer = buffer;
+          const filter = this.ctx.createBiquadFilter();
+          filter.type = 'bandpass';
+          filter.frequency.setValueAtTime(1100, this.ctx.currentTime);
+          filter.frequency.exponentialRampToValueAtTime(250, this.ctx.currentTime + 0.22);
+          const gain = this.ctx.createGain();
+          gain.gain.setValueAtTime(0.35, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.22);
+          noise.connect(filter);
+          filter.connect(gain);
+          gain.connect(this.ctx.destination);
+          noise.start();
+          noise.stop(this.ctx.currentTime + 0.25);
+        } catch(e) {}
+      }
+      playHolo() {
+        if (this.muted) return;
+        [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+          setTimeout(() => this.beep(freq, 'triangle', 0.2, 0.15), idx * 50);
+        });
+      }
+      playHammer() {
+        if (this.muted) return;
+        this.beep(160, 'square', 0.1, 0.35);
+        setTimeout(() => this.beep(1200, 'sine', 0.08, 0.2), 30);
+      }
+      playCash() {
+        if (this.muted) return;
+        this.beep(987.77, 'sine', 0.1, 0.25);
+        setTimeout(() => this.beep(1318.51, 'sine', 0.18, 0.3), 70);
+      }
+    }
+    const audio = new AudioEngine();
+
+    function toggleSound() {
+      audio.muted = !audio.muted;
+      const label = document.getElementById('soundLabel');
+      if (audio.muted) {
+        label.textContent = '[OFF]';
+        label.parentElement.classList.add('text-slate-600');
+      } else {
+        label.textContent = '[SND]';
+        label.parentElement.classList.remove('text-slate-600');
+        audio.beep(600, 'sine', 0.05);
+      }
+    }
+
+    // Unlock Web Audio on first iOS touch/tap
+    window.addEventListener('touchstart', function unlockAudio() {
+      audio.init();
+      window.removeEventListener('touchstart', unlockAudio);
+    }, { passive: true });
+
+    /* =========================================================================
+       CARD SET DEFINITIONS & AUTHENTIC DOSSIER DATA
+       ========================================================================= */
+    const CARD_SETS = [
+      {
+        id: 'base_set',
+        name: 'Base Set',
+        year: '1999',
+        price: 25.00,
+        mascot: 'Charizard',
+        totalCards: 102,
+        cardPool: [
+          { name: 'Charizard', num: '4/102', rarity: 'Holo Rare', type: 'Fire', baseVal: 340.00, hp: 120, genus: 'Flame Apex Organism', notes: 'Spits fires that are hot enough to melt boulders. Known to cause unintentional forest fires.' },
+          { name: 'Blastoise', num: '2/102', rarity: 'Holo Rare', type: 'Water', baseVal: 130.00, hp: 100, genus: 'Artillery Chelonian', notes: 'A brutal Pokémon with pressurized water jets protruding from its shell for high-velocity punctures.' },
+          { name: 'Venusaur', num: '15/102', rarity: 'Holo Rare', type: 'Grass', baseVal: 95.00, hp: 100, genus: 'Symbiotic Flora Titan', notes: 'The plant blooms when it absorbs solar energy. It stays on the move to seek sunlight.' },
+          { name: 'Alakazam', num: '1/102', rarity: 'Holo Rare', type: 'Psychic', baseVal: 55.00, hp: 80, genus: 'Neural Psi Conduit', notes: 'Its brain can outperform a supercomputer. Its intelligence quotient is estimated to exceed 5,000.' },
+          { name: 'Mewtwo', num: '10/102', rarity: 'Holo Rare', type: 'Psychic', baseVal: 65.00, hp: 60, genus: 'Synthetic Clone Specimen', notes: 'Engineered by a scientist after years of gene splicing and DNA engineering experiments.' },
+          { name: 'Zapdos', num: '16/102', rarity: 'Holo Rare', type: 'Lightning', baseVal: 50.00, hp: 90, genus: 'Thunder Avian Titan', notes: 'A legendary bird Pokémon said to appear when lightning strikes from clouds.' },
+          { name: 'Machamp', num: '8/102', rarity: 'Holo Rare', type: 'Fighting', baseVal: 35.00, hp: 100, genus: 'Tetra-Limb Brawler', notes: 'Using its heavy four arms, it can launch a flurry of 1,000 punches in just two seconds.' },
+          { name: 'Gyarados', num: '6/102', rarity: 'Holo Rare', type: 'Water', baseVal: 48.00, hp: 100, genus: 'Atavistic Sea Calamity', notes: 'Rarely seen in the wild. Huge and vicious, it is capable of destroying entire coastal towns.' },
+          { name: 'Dragonair', num: '18/102', rarity: 'Rare', type: 'Colorless', baseVal: 18.00, hp: 70, genus: 'Aura Dragon Serpent', notes: 'A mystical Pokémon that exudes a gentle aura. Said to hold power to manipulate weather.' },
+          { name: 'Electabuzz', num: '20/102', rarity: 'Rare', type: 'Lightning', baseVal: 12.00, hp: 70, genus: 'Current Generator', notes: 'Normally found near power plants. Can easily cause blackouts in residential sectors.' },
+          { name: 'Arcanine', num: '23/102', rarity: 'Uncommon', type: 'Fire', baseVal: 6.00, hp: 100, genus: 'Legendary Canine', notes: 'A legendary Pokémon in the Orient. Admired for the beauty and grace of its boundless running.' },
+          { name: 'Charmeleon', num: '24/102', rarity: 'Uncommon', type: 'Fire', baseVal: 7.00, hp: 80, genus: 'Flame Lizard', notes: 'Tough natured. In battle, it swings its tail to knock down adversaries then rips with claws.' },
+          { name: 'Haunter', num: '29/102', rarity: 'Uncommon', type: 'Psychic', baseVal: 5.00, hp: 60, genus: 'Spectral Entity', notes: 'Because of its ability to slip through walls, it is said to be from another dimension.' },
+          { name: 'Pikachu', num: '58/102', rarity: 'Common', type: 'Lightning', baseVal: 15.00, hp: 40, genus: 'Electric Rodent', notes: 'When several of these Pokémon gather, their electricity can build and cause lightning storms.' },
+          { name: 'Charmander', num: '46/102', rarity: 'Common', type: 'Fire', baseVal: 4.00, hp: 50, genus: 'Lizard Sub-Species', notes: 'The flame at the tip of its tail indicates its emotional state and internal metabolic health.' },
+          { name: 'Squirtle', num: '63/102', rarity: 'Common', type: 'Water', baseVal: 4.50, hp: 40, genus: 'Tiny Turtle', notes: 'After birth, its back swells and hardens into a shell. Powerfully sprays foam from mouth.' },
+          { name: 'Bulbasaur', num: '44/102', rarity: 'Common', type: 'Grass', baseVal: 4.00, hp: 40, genus: 'Seed Symbiote', notes: 'A strange seed was planted on its back at birth. The plant sprout grows and develops with it.' },
+          { name: 'Fire Energy', num: '98/102', rarity: 'Common', type: 'Energy', baseVal: 0.50, hp: null, genus: 'Thermal Kinetic Matrix', notes: 'Elementary combustible plasma channel utilized to fuel flame-type biological abilities.' }
+        ]
+      },
+      {
+        id: 'jungle',
+        name: 'Jungle',
+        year: '1999',
+        price: 22.00,
+        mascot: 'Scyther',
+        totalCards: 64,
+        cardPool: [
+          { name: 'Scyther', num: '10/64', rarity: 'Holo Rare', type: 'Grass', baseVal: 70.00, hp: 70, genus: 'Mantis Infiltrator', notes: 'With ninja-like agility and blinding speed, it creates the illusion of there being more than one.' },
+          { name: 'Snorlax', num: '11/64', rarity: 'Holo Rare', type: 'Colorless', baseVal: 90.00, hp: 90, genus: 'Somnolent Colossus', notes: 'Very lazy. Just eats and sleeps. As its enormous bulk builds, it becomes even more lethargic.' },
+          { name: 'Vaporeon', num: '12/64', rarity: 'Holo Rare', type: 'Water', baseVal: 65.00, hp: 80, genus: 'Bubble Jet Entity', notes: 'Lives close to water. Its long tail is ridged with a fin which is often mistaken for a mermaid.' },
+          { name: 'Jolteon', num: '4/64', rarity: 'Holo Rare', type: 'Lightning', baseVal: 65.00, hp: 70, genus: 'Lightning Organism', notes: 'It accumulates negative ions in the atmosphere to blast out 10,000-volt lightning bolts.' },
+          { name: 'Flareon', num: '3/64', rarity: 'Holo Rare', type: 'Fire', baseVal: 65.00, hp: 70, genus: 'Thermal Flame Organism', notes: 'When storing thermal energy in its body, its internal temp can surge to over 1,600 degrees.' },
+          { name: 'Pinsir', num: '25/64', rarity: 'Rare', type: 'Grass', baseVal: 12.00, hp: 60, genus: 'Stag Beetle Apex', notes: 'If it fails to crush victim in its pincers, it will swing them around and toss them violently.' },
+          { name: 'Eevee', num: '51/64', rarity: 'Common', type: 'Colorless', baseVal: 6.00, hp: 50, genus: 'Adaptive Genetic Node', notes: 'Possesses an irregular genetic code that can easily mutate depending on environmental catalysts.' },
+          { name: 'Meowth', num: '56/64', rarity: 'Common', type: 'Colorless', baseVal: 2.50, hp: 50, genus: 'Scratch Feline', notes: 'Adores round, shiny objects. It wanders streets nightly looking for lost currency.' }
+        ]
+      },
+      {
+        id: 'fossil',
+        name: 'Fossil',
+        year: '1999',
+        price: 24.00,
+        mascot: 'Dragonite',
+        totalCards: 62,
+        cardPool: [
+          { name: 'Dragonite', num: '4/62', rarity: 'Holo Rare', type: 'Colorless', baseVal: 110.00, hp: 100, genus: 'Marine Draconic Carrier', notes: 'An extremely rare marine Pokémon. Its intelligence is said to match human levels.' },
+          { name: 'Gengar', num: '5/62', rarity: 'Holo Rare', type: 'Psychic', baseVal: 95.00, hp: 80, genus: 'Thermal Void Shadow', notes: 'Under a full moon, this Pokémon likes to mimic shadows of people and laugh at their fright.' },
+          { name: 'Lapras', num: '10/62', rarity: 'Holo Rare', type: 'Water', baseVal: 55.00, hp: 80, genus: 'Transport Cetacean', notes: 'A gentle beast gentle enough to allow people to ride on its back across ocean depths.' },
+          { name: 'Aerodactyl', num: '1/62', rarity: 'Holo Rare', type: 'Fighting', baseVal: 50.00, hp: 60, genus: 'Prehistoric Flying Reptile', notes: 'A vicious Pokémon from the distant past. It flies with outspread serrated wings.' },
+          { name: 'Articuno', num: '2/62', rarity: 'Holo Rare', type: 'Water', baseVal: 65.00, hp: 70, genus: 'Cryogenic Avian Titan', notes: 'A legendary bird Pokémon that is said to appear to doomed people lost in icy mountains.' },
+          { name: 'Ditto', num: '18/62', rarity: 'Rare', type: 'Colorless', baseVal: 14.00, hp: 50, genus: 'Morphological Cellular Mass', notes: 'Capable of copying an enemy genetic code to instantly transform itself into a duplicate.' },
+          { name: 'Psyduck', num: '53/62', rarity: 'Common', type: 'Water', baseVal: 3.00, hp: 50, genus: 'Psychosomatic Duck', notes: 'While lulling enemies with its vacant look, this wily Pokémon uses psychokinesis unexpectedly.' }
+        ]
+      },
+      {
+        id: 'team_rocket',
+        name: 'Team Rocket',
+        year: '2000',
+        price: 32.00,
+        mascot: 'Dark Charizard',
+        totalCards: 82,
+        cardPool: [
+          { name: 'Dark Raichu', num: '83/82', rarity: 'Secret Rare', type: 'Lightning', baseVal: 190.00, hp: 70, genus: 'Surge Rodent Mutation', notes: 'Classified secret specimen #83. Exhibits anomalous electrostatic potential on aquatic surfaces.' },
+          { name: 'Dark Charizard', num: '4/82', rarity: 'Holo Rare', type: 'Fire', baseVal: 280.00, hp: 80, genus: 'Corrupted Flame Drake', notes: 'Weaponized fire breath can incinerate organic targets at range. Merciless in field combat.' },
+          { name: 'Dark Blastoise', num: '3/82', rarity: 'Holo Rare', type: 'Water', baseVal: 140.00, hp: 70, genus: 'Modified Hydro Tank', notes: 'Fitted with industrial caliber cannons by syndicate handlers to maximize piercing torque.' },
+          { name: 'Dark Dragonite', num: '5/82', rarity: 'Holo Rare', type: 'Colorless', baseVal: 120.00, hp: 70, genus: 'Subjugated Dragon', notes: 'Its gentle nature suppressed through neural dampening collar technology.' },
+          { name: 'Here Comes Team Rocket!', num: '71/82', rarity: 'Rare', type: 'Trainer', baseVal: 25.00, hp: null, genus: 'Syndicate Intercept Directive', notes: 'Emergency directive reversing privacy protocols across both operating arenas.' },
+          { name: 'Koffing', num: '58/82', rarity: 'Common', type: 'Grass', baseVal: 2.00, hp: 50, genus: 'Toxic Gas Mine', notes: 'Because it stores several kinds of toxic gases in its body, it is prone to exploding suddenly.' }
+        ]
+      },
+      {
+        id: 'gym_heroes',
+        name: 'Gym Heroes',
+        year: '2000',
+        price: 36.00,
+        mascot: "Blaine's Moltres",
+        totalCards: 132,
+        cardPool: [
+          { name: "Blaine's Moltres", num: '1/132', rarity: 'Holo Rare', type: 'Fire', baseVal: 150.00, hp: 90, genus: 'Volcanic Phoenix Specimen', notes: 'Conditioned by Cinnabar Leader Blaine to survive prolonged geothermal submersion.' },
+          { name: "Sabrina's Gengar", num: '14/132', rarity: 'Holo Rare', type: 'Psychic', baseVal: 135.00, hp: 80, genus: 'Telepathic Shadow Specter', notes: 'Synchronized with Saffron Gym telepathic frequencies to project nightmare loops.' },
+          { name: "Erika's Vileplume", num: '5/132', rarity: 'Holo Rare', type: 'Grass', baseVal: 75.00, hp: 80, genus: 'Aromatherapeutic Titan', notes: 'Distributes pollen clouds that induce instant sensory relaxation or paralysis.' },
+          { name: "Lt. Surge's Electabuzz", num: '6/132', rarity: 'Holo Rare', type: 'Lightning', baseVal: 65.00, hp: 70, genus: 'Military Voltage Unit', notes: 'Disciplined under Vermilion Gym protocols with high-output discharge coils.' },
+          { name: "Brock's Onix", num: '21/132', rarity: 'Rare', type: 'Fighting', baseVal: 22.00, hp: 100, genus: 'Rock Snake Excavator', notes: 'Trained to drill through solid granite strata at 50 miles per hour.' },
+          { name: "Misty's Psyduck", num: '90/132', rarity: 'Common', type: 'Water', baseVal: 4.00, hp: 50, genus: 'Cerulean Duck Subject', notes: 'Subject exhibits unpredictable psychic surges when headache distress registers above 85%.' }
+        ]
+      },
+      {
+        id: 'neo_genesis',
+        name: 'Neo Genesis',
+        year: '2000',
+        price: 45.00,
+        mascot: 'Lugia',
+        totalCards: 111,
+        cardPool: [
+          { name: 'Lugia', num: '9/111', rarity: 'Holo Rare', type: 'Colorless', baseVal: 380.00, hp: 90, genus: 'Deep Ocean Tempest Beast', notes: 'It slumbers in the deep ocean trench because its power is far too potent for the surface.' },
+          { name: 'Typhlosion (17)', num: '17/111', rarity: 'Holo Rare', type: 'Fire', baseVal: 220.00, hp: 100, genus: 'Volcanic Blast Organism', notes: 'Has a secret destructive attack. It rubs its blazing fur together to create huge explosions.' },
+          { name: 'Feraligatr', num: '4/111', rarity: 'Holo Rare', type: 'Water', baseVal: 120.00, hp: 120, genus: 'Bite Juggernaut', notes: 'When it bites with its massive and powerful jaws, it shakes its head and tears its victim up.' },
+          { name: 'Meganium', num: '10/111', rarity: 'Holo Rare', type: 'Grass', baseVal: 90.00, hp: 100, genus: 'Aroma Calmer', notes: 'The aroma that rises from its petals contains a substance that calms aggressive feelings.' },
+          { name: 'Steelix', num: '15/111', rarity: 'Holo Rare', type: 'Colorless', baseVal: 85.00, hp: 110, genus: 'Iron Snake Construct', notes: 'Its body has been compressed underground. It is harder than a diamond.' },
+          { name: 'Pichu', num: '12/111', rarity: 'Holo Rare', type: 'Lightning', baseVal: 75.00, hp: 30, genus: 'Tiny Electric Baby', notes: 'It is not yet skilled at storing electricity. It may send out a jolt if amused or startled.' },
+          { name: 'Cyndaquil', num: '57/111', rarity: 'Uncommon', type: 'Fire', baseVal: 8.00, hp: 50, genus: 'Fire Mouse', notes: 'It is timid, and always curls itself up into a ball. If attacked, it flares up its back for defense.' }
+        ]
+      }
+    ];
+
+    /* =========================================================================
+       15+ REALISTIC SIMULATED AUCTION BIDDERS
+       ========================================================================= */
+    const AUCTION_BIDDERS = [
+      { name: 'Satoshi_Collector', aggro: 0.8, budgetMult: 2.2, favType: 'Fire' },
+      { name: 'NeoWhale_99', aggro: 0.9, budgetMult: 3.5, favType: 'Colorless' },
+      { name: 'MintHunter_PSA', aggro: 0.75, budgetMult: 2.0, favType: 'Any' },
+      { name: 'PalletTownBroker', aggro: 0.6, budgetMult: 1.5, favType: 'Water' },
+      { name: 'TokyoArchivist', aggro: 0.85, budgetMult: 2.8, favType: 'Psychic' },
+      { name: 'CeruleanVault', aggro: 0.7, budgetMult: 1.8, favType: 'Water' },
+      { name: 'CeladonBroker', aggro: 0.65, budgetMult: 1.6, favType: 'Grass' },
+      { name: 'KantoTycoon', aggro: 0.95, budgetMult: 3.2, favType: 'Lightning' },
+      { name: 'SilverLugiaFan', aggro: 0.8, budgetMult: 2.5, favType: 'Colorless' },
+      { name: 'VermilionSniper', aggro: 0.7, budgetMult: 1.7, favType: 'Lightning' },
+      { name: 'CinnabarReserves', aggro: 0.85, budgetMult: 2.6, favType: 'Fire' },
+      { name: 'IndigoPlateauElite', aggro: 0.9, budgetMult: 3.0, favType: 'Any' },
+      { name: 'GoldenrodHedge', aggro: 0.75, budgetMult: 2.1, favType: 'Colorless' },
+      { name: 'SaffronMystic', aggro: 0.7, budgetMult: 1.9, favType: 'Psychic' }
+    ];
+
+    /* =========================================================================
+       GAME STATE & STORAGE
+       ========================================================================= */
+    const STORAGE_KEY = 'pokevault_v5_save';
+
+    let state = {
+      balance: 150.00,
+      packsOpened: 0,
+      topSale: 0.00,
+      collection: [],
+      ledger: [],
+      godMode: {
+        forceMint10: false
+      }
+    };
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch(e) {}
+      updateHeaderTelemetry();
+    }
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          state = { ...state, ...parsed };
+          if (!state.godMode) state.godMode = { forceMint10: false };
+        }
+      } catch(e) {}
+      updateHeaderTelemetry();
+    }
+
+    function updateHeaderTelemetry() {
+      document.getElementById('uiBalance').textContent = `$${state.balance.toFixed(2)}`;
+      document.getElementById('shopPacksOpened').textContent = state.packsOpened;
+
+      const gradedCount = state.collection.filter(c => c.isGraded).length;
+      document.getElementById('dockCountBinder').textContent = state.collection.length;
+      document.getElementById('dockCountGraded').textContent = gradedCount;
+      document.getElementById('labSlabCount').textContent = gradedCount;
+
+      // Metrics View
+      document.getElementById('metricBalance').textContent = `$${state.balance.toFixed(2)}`;
+      document.getElementById('metricTopSale').textContent = `$${state.topSale.toFixed(2)}`;
+      document.getElementById('metricGemMint').textContent = state.collection.filter(c => c.isGraded && c.grade === 10).length;
+      document.getElementById('metricDossiersHeld').textContent = state.collection.length;
+
+      // God indicator
+      const godPill = document.getElementById('godPill');
+      if (state.godMode.forceMint10) {
+        godPill.classList.remove('hidden');
+      } else {
+        godPill.classList.add('hidden');
+      }
+    }
+
+    function claimAllowance() {
+      state.balance += 50.00;
+      saveState();
+      audio.playCash();
+      showToast('GRANT APPROVED', '+$50.00 credited to balance.', 'dollar');
+      renderShopView();
+    }
+
+    function getCardValuation(card) {
+      let base = card.baseVal;
+      if (card.edition === '1st Edition') {
+        base *= 3.8;
+      }
+      if (!card.isGraded) return Math.round(base * 100) / 100;
+
+      const g = card.grade;
+      let mult = 1.0;
+      if (g === 10) mult = card.edition === '1st Edition' ? 32.0 : 22.0;
+      else if (g === 9.5) mult = 14.0;
+      else if (g === 9.0) mult = 6.0;
+      else if (g === 8.5) mult = 3.2;
+      else if (g === 8.0) mult = 2.0;
+      else if (g === 7.0) mult = 1.3;
+      else mult = 0.8;
+      return Math.round(base * mult);
+    }
+
+    /* =========================================================================
+       NAVIGATION SYSTEM (BOTTOM DOCK)
+       ========================================================================= */
+    const DOCK_TABS = ['shop', 'binder', 'grading', 'auction', 'ledger', 'god'];
+
+    function navigateTab(tabKey) {
+      DOCK_TABS.forEach(t => {
+        const view = document.getElementById(`view-${t}`);
+        const btn = document.getElementById(`dock-${t}`);
+        if (view) view.classList.add('hidden');
+        if (btn) {
+          btn.classList.remove('text-term-cyan', 'text-amber-400');
+          btn.classList.add('text-slate-400');
+        }
+      });
+
+      const targetView = document.getElementById(`view-${tabKey}`);
+      const targetBtn = document.getElementById(`dock-${tabKey}`);
+      if (targetView) targetView.classList.remove('hidden');
+      if (targetBtn) {
+        targetBtn.classList.remove('text-slate-400');
+        targetBtn.classList.add(tabKey === 'god' ? 'text-amber-400' : 'text-term-cyan');
+      }
+
+      audio.beep(360, 'sine', 0.04);
+
+      if (tabKey === 'shop') renderShopView();
+      if (tabKey === 'binder') renderBinderView();
+      if (tabKey === 'grading') renderGradingView();
+      if (tabKey === 'auction') renderAuctionFloorView();
+      if (tabKey === 'ledger') renderLedgerView();
+      if (tabKey === 'god') renderGodView();
+    }
+
+    /* =========================================================================
+       VIEW 1: PACK SHOP
+       ========================================================================= */
+    function renderShopView() {
+      const container = document.getElementById('packCatalogGrid');
+      container.innerHTML = '';
+
+      CARD_SETS.forEach(set => {
+        const printings = [
+          { edition: 'Unlimited', price: set.price, tagClass: 'text-slate-400 border-slate-700 bg-slate-900' },
+          { edition: '1st Edition', price: Math.round(set.price * 3.8), tagClass: 'text-amber-300 border-amber-500/50 bg-amber-500/10' }
+        ];
+
+        printings.forEach(p => {
+          const cardBox = document.createElement('div');
+          const is1st = p.edition === '1st Edition';
+          cardBox.className = `bg-term-panel border ${is1st ? 'border-amber-500/40' : 'border-term-border'} hover:border-slate-500 rounded-xl p-3 flex flex-col justify-between font-mono space-y-2.5`;
+          
+          const held = state.collection.filter(c => c.setName === set.name && c.edition === p.edition).length;
+
+          cardBox.innerHTML = `
+            <div>
+              <div class="flex justify-between items-start text-[9px] border-b border-slate-800 pb-1">
+                <span class="text-slate-500">${set.year} EXP</span>
+                <span class="px-1 py-0.2 rounded border text-[8px] font-bold ${p.tagClass}">${is1st ? '★ 1ST EDITION' : 'UNLIMITED'}</span>
+              </div>
+              
+              <div class="py-1.5">
+                <div class="text-xs sm:text-sm font-extrabold text-white uppercase tracking-tight flex items-center gap-1">
+                  ${set.name}
+                  ${is1st ? '<span class="text-amber-400 text-[10px]">●1ST</span>' : ''}
+                </div>
+                <div class="text-[10px] text-slate-400 font-sans">${set.mascot} Foil Wrapper</div>
+              </div>
+
+              <div class="bg-slate-950 p-2 rounded border border-slate-800 text-[9px] text-slate-400 leading-tight">
+                <div>+---------------------------+</div>
+                <div>| 10 ARCHIVAL SPECIMENS       |</div>
+                <div>| PRINT: ${p.edition.padEnd(20)}|</div>
+                <div>| HELD: ${held.toString().padEnd(21)}|</div>
+                <div>+---------------------------+</div>
+              </div>
+            </div>
+
+            <div class="border-t border-slate-800 pt-2 flex items-center justify-between">
+              <div>
+                <span class="text-[8px] text-slate-500 block">COST</span>
+                <span class="text-xs sm:text-sm font-bold ${is1st ? 'text-amber-400' : 'text-term-emerald'} font-mono">$${p.price.toFixed(2)}</span>
+              </div>
+              <button onclick="procureBoosterPack('${set.id}', '${p.edition}')" class="px-3 py-1.5 rounded ${is1st ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-black' : 'bg-slate-800 hover:bg-slate-700 text-white font-bold'} text-[11px] transition">
+                UNSEAL ${is1st ? '1ST' : 'PACK'}
+              </button>
+            </div>
+          `;
+          container.appendChild(cardBox);
+        });
+      });
+    }
+
+    /* =========================================================================
+       PACK OPENING MANIFEST LOGIC
+       ========================================================================= */
+    let currentPackBatch = [];
+    let currentDossierIndex = 0;
+
+    function procureBoosterPack(setId, edition = 'Unlimited') {
+      const set = CARD_SETS.find(s => s.id === setId);
+      if (!set) return;
+
+      const price = edition === '1st Edition' ? Math.round(set.price * 3.8) : set.price;
+
+      if (state.balance < price) {
+        showToast('INSUFFICIENT CAPITAL', `Cost is $${price.toFixed(2)}. Claim grant or sell assets.`, 'warning');
+        audio.beep(200, 'sawtooth', 0.15);
+        return;
+      }
+
+      state.balance -= price;
+      state.packsOpened += 1;
+      saveState();
+
+      currentPackBatch = generatePackDossiers(set, edition);
+      currentDossierIndex = 0;
+
+      document.getElementById('packRipModalTitle').textContent = `SEALED ARCHIVE: ${set.name.toUpperCase()} [${edition.toUpperCase()}]`;
+      document.getElementById('packStageBreach').classList.remove('hidden');
+      document.getElementById('packStageManifest').classList.add('hidden');
+      document.getElementById('packBreachSubtitle').textContent = `10 ${edition} Specimens Ready`;
+      document.getElementById('modalPackRip').classList.remove('hidden');
+      audio.beep(480, 'sine', 0.08);
+    }
+
+    function generatePackDossiers(set, edition = 'Unlimited') {
+      const cards = [];
+      const commons = set.cardPool.filter(c => c.rarity === 'Common');
+      const uncommons = set.cardPool.filter(c => c.rarity === 'Uncommon');
+      const rares = set.cardPool.filter(c => c.rarity === 'Rare');
+      const holos = set.cardPool.filter(c => c.rarity === 'Holo Rare' || c.rarity === 'Secret Rare');
+
+      function rollSubgrade() {
+        if (state.godMode.forceMint10) return 10.0;
+        const r = Math.random();
+        if (r < 0.12) return 8.0 + (Math.floor(Math.random() * 2) * 0.5);
+        if (r < 0.45) return 9.0;
+        if (r < 0.82) return 9.5;
+        return 10.0;
+      }
+
+      function instanciate(base) {
+        const c = rollSubgrade();
+        const e = rollSubgrade();
+        const cr = rollSubgrade();
+        const s = rollSubgrade();
+        const avg = state.godMode.forceMint10 ? 10.0 : Math.round(((c + e + cr + s) / 4) * 2) / 2;
+
+        return {
+          id: 'card_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+          name: base.name,
+          setName: set.name,
+          edition: edition,
+          num: base.num,
+          rarity: base.rarity,
+          type: base.type,
+          hp: base.hp,
+          baseVal: base.baseVal,
+          genus: base.genus,
+          notes: base.notes,
+          subgrades: { centering: c, edges: e, corners: cr, surface: s },
+          potentialGrade: Math.min(10, Math.max(1, avg)),
+          isGraded: false,
+          gradeTier: null,
+          grade: null,
+          certNum: null
+        };
+      }
+
+      for (let i = 0; i < 6; i++) {
+        const pool = commons.length ? commons : set.cardPool;
+        cards.push(instanciate(pool[Math.floor(Math.random() * pool.length)]));
+      }
+      for (let i = 0; i < 3; i++) {
+        const pool = uncommons.length ? uncommons : set.cardPool;
+        cards.push(instanciate(pool[Math.floor(Math.random() * pool.length)]));
+      }
+      const isHolo = Math.random() < 0.35 && holos.length > 0;
+      const rarePool = isHolo ? holos : (rares.length ? rares : set.cardPool);
+      cards.push(instanciate(rarePool[Math.floor(Math.random() * rarePool.length)]));
+
+      return cards;
+    }
+
+    function executePackBreach() {
+      audio.playTear();
+      document.getElementById('packStageBreach').classList.add('hidden');
+      document.getElementById('packStageManifest').classList.remove('hidden');
+
+      currentPackBatch.forEach(c => state.collection.push(c));
+      saveState();
+
+      renderRipPips();
+      showDossierAtIndex(0);
+    }
+
+    function renderRipPips() {
+      const container = document.getElementById('ripPipsContainer');
+      container.innerHTML = '';
+      currentPackBatch.forEach((c, idx) => {
+        const pip = document.createElement('div');
+        const isHolo = c.rarity.includes('Holo') || c.rarity.includes('Secret');
+        pip.className = `w-4 h-6 rounded border text-[8px] flex items-center justify-center cursor-pointer transition font-mono ${
+          idx === currentDossierIndex ? 'border-amber-400 bg-amber-400/20 text-white font-bold' : 'border-slate-800 bg-slate-900 text-slate-500'
+        }`;
+        pip.textContent = isHolo ? '★' : (idx + 1);
+        pip.onclick = () => showDossierAtIndex(idx);
+        container.appendChild(pip);
+      });
+    }
+
+    function showDossierAtIndex(index) {
+      if (index < 0 || index >= currentPackBatch.length) return;
+      currentDossierIndex = index;
+      const card = currentPackBatch[index];
+
+      document.getElementById('ripIndexDisplay').textContent = index + 1;
+      document.getElementById('btnPrevDossier').disabled = index === 0;
+
+      const nextBtn = document.getElementById('btnNextDossier');
+      if (index === currentPackBatch.length - 1) {
+        nextBtn.textContent = 'FINISH';
+      } else {
+        nextBtn.textContent = 'NEXT >';
+      }
+
+      document.getElementById('activeDossierSpotlight').innerHTML = buildTextDossierCardHtml(card, 'large');
+      renderRipPips();
+
+      if (card.rarity.includes('Holo') || card.rarity.includes('Secret')) {
+        audio.playHolo();
+      } else {
+        audio.beep(300, 'triangle', 0.05);
+      }
+    }
+
+    function nextPackDossier() {
+      if (currentDossierIndex < currentPackBatch.length - 1) {
+        showDossierAtIndex(currentDossierIndex + 1);
+      } else {
+        closePackModal();
+        showToast('EXTRACTION COMPLETE', '10 records cataloged.', 'check');
+      }
+    }
+
+    function prevPackDossier() {
+      if (currentDossierIndex > 0) {
+        showDossierAtIndex(currentDossierIndex - 1);
+      }
+    }
+
+    function revealAllPackCards() {
+      showDossierAtIndex(currentPackBatch.length - 1);
+    }
+
+    function closePackModal() {
+      document.getElementById('modalPackRip').classList.add('hidden');
+      renderShopView();
+      renderBinderView();
+    }
+
+    /* =========================================================================
+       TEXT DOSSIER HTML COMPONENT
+       ========================================================================= */
+    function buildTextDossierCardHtml(card, size = 'normal') {
+      const isLarge = size === 'large';
+      const isHolo = card.rarity.includes('Holo') || card.rarity.includes('Secret');
+      const is1st = card.edition === '1st Edition';
+      const wClass = isLarge ? 'w-full max-w-sm' : 'w-full';
+
+      const typeColors = {
+        'Fire': 'text-amber-400 border-amber-500/30',
+        'Water': 'text-sky-400 border-sky-500/30',
+        'Grass': 'text-emerald-400 border-emerald-500/30',
+        'Lightning': 'text-yellow-400 border-yellow-500/30',
+        'Psychic': 'text-purple-400 border-purple-500/30',
+        'Fighting': 'text-amber-600 border-amber-700/30',
+        'Colorless': 'text-slate-300 border-slate-600/30',
+        'Trainer': 'text-cyan-300 border-cyan-500/30',
+        'Energy': 'text-amber-300 border-amber-500/30'
+      };
+      const badgeStyle = typeColors[card.type] || 'text-slate-300 border-slate-700';
+      const val = getCardValuation(card);
+
+      return `
+        <div class="${wClass} bg-term-plate border ${is1st ? 'border-amber-500/70' : (isHolo ? 'border-amber-400/60 holo-glow' : 'border-slate-800')} rounded-xl p-3 flex flex-col justify-between font-mono text-xs select-none">
+          <div class="border-b border-slate-800 pb-1.5 space-y-1">
+            <div class="flex justify-between items-center text-[9px] text-slate-500">
+              <span class="flex items-center gap-1">
+                EXP: ${card.setName.toUpperCase()}
+                ${is1st ? '<span class="px-1 rounded bg-amber-400/20 text-amber-300 border border-amber-500/40 text-[7px] font-bold">1ST ED</span>' : ''}
+              </span>
+              <span class="px-1 py-0.2 rounded border ${badgeStyle} text-[8px] font-bold uppercase">${card.type}</span>
+            </div>
+            <div class="flex justify-between items-baseline">
+              <span class="font-extrabold text-white text-xs sm:text-sm tracking-tight truncate">${card.name}</span>
+              ${card.hp ? `<span class="text-rose-400 font-bold text-[10px]">HP:${card.hp}</span>` : `<span class="text-slate-500 text-[9px]">TRAINER</span>`}
+            </div>
+          </div>
+
+          <div class="my-2 p-2 bg-slate-950/70 border border-slate-800/80 rounded space-y-1 text-[9px]">
+            <div class="flex justify-between text-slate-500">
+              <span>TAXONOMY:</span>
+              <span class="text-slate-300 truncate max-w-[150px]">${card.genus}</span>
+            </div>
+            <div class="text-slate-400 font-sans text-[9px] leading-snug border-t border-slate-900 pt-1 italic truncate sm:whitespace-normal">
+              "${card.notes}"
+            </div>
+          </div>
+
+          <div class="border-t border-slate-800 pt-1.5 flex items-center justify-between text-[9px]">
+            <span class="text-slate-500">#${card.num}</span>
+            <span class="px-1 py-0.5 rounded text-[8px] font-bold ${isHolo ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-slate-900 text-slate-400'}">
+              ${card.rarity.toUpperCase()}
+            </span>
+            <span class="text-term-emerald font-bold font-mono">$${val.toFixed(2)}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function buildTextSlabHtml(card, size = 'normal') {
+      const grade = card.grade || 10;
+      const isBgs = card.gradeTier === 'express';
+      const is1st = card.edition === '1st Edition';
+      const wClass = size === 'large' ? 'w-full max-w-sm' : 'w-full';
+
+      let labelText = 'GEM MINT 10';
+      if (grade === 9.5) labelText = 'PRISTINE 9.5';
+      else if (grade === 9.0) labelText = 'MINT 9';
+      else if (grade === 8.5) labelText = 'NM-MT+ 8.5';
+      else if (grade === 8.0) labelText = 'NM-MT 8';
+      else if (grade <= 7.0) labelText = 'EXCELLENT ' + grade;
+
+      return `
+        <div class="${wClass} slab-border bg-slate-950/90 rounded-xl p-2.5 flex flex-col justify-between font-mono text-xs select-none">
+          <div class="bg-slate-100 text-slate-950 p-2 rounded border-2 ${isBgs ? 'border-amber-600' : 'border-red-600'} flex justify-between items-center shadow">
+            <div class="overflow-hidden pr-1.5">
+              <div class="text-[7px] font-bold text-slate-600 tracking-tight flex items-center gap-1">
+                ${card.setName.toUpperCase()}
+                ${is1st ? '<span class="text-amber-800 font-black">1ST ED.</span>' : ''}
+              </div>
+              <div class="text-[11px] font-black truncate">${card.name}</div>
+              <div class="text-[7px] text-slate-700">${card.rarity} • #${card.num}</div>
+            </div>
+            <div class="text-right border-l-2 ${isBgs ? 'border-amber-600' : 'border-red-600'} pl-1.5 flex flex-col items-center">
+              <span class="text-[7px] font-black uppercase text-red-700">${isBgs ? 'BGS' : 'PSA'}</span>
+              <span class="text-lg font-black leading-none font-serif">${grade}</span>
+              <span class="text-[6px] font-bold text-slate-800">${labelText}</span>
+            </div>
+          </div>
+
+          <div class="my-2 flex justify-center">
+            <div class="w-full">
+              ${buildTextDossierCardHtml(card, 'normal')}
+            </div>
+          </div>
+
+          <div class="border-t border-slate-800 pt-1.5 flex justify-between items-center text-[8px] text-slate-400">
+            <span>CERT #${card.certNum || '84910294'}</span>
+            <span class="text-term-emerald font-bold font-mono">$${getCardValuation(card).toFixed(2)}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    /* =========================================================================
+       VIEW 2: MASTER BINDER
+       ========================================================================= */
+    function renderBinderView() {
+      const setFilt = document.getElementById('filterSet').value;
+      const edFilt = document.getElementById('filterEdition').value;
+      const gradFilt = document.getElementById('filterGraded').value;
+
+      let list = state.collection;
+      if (setFilt !== 'ALL') list = list.filter(c => c.setName === setFilt);
+      if (edFilt !== 'ALL') list = list.filter(c => c.edition === edFilt);
+      if (gradFilt === 'GRADED') list = list.filter(c => c.isGraded);
+      if (gradFilt === 'RAW') list = list.filter(c => !c.isGraded);
+
+      const totalVal = state.collection.reduce((acc, c) => acc + getCardValuation(c), 0);
+      document.getElementById('binderEstValue').textContent = `$${totalVal.toFixed(2)}`;
+
+      renderSetCompletionPills();
+
+      const grid = document.getElementById('binderGrid');
+      grid.innerHTML = '';
+
+      if (list.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-full py-12 text-center text-slate-500 font-mono text-xs border border-dashed border-slate-800 rounded-xl">
+            // No specimen records found. Unseal packs from Procure dock.
+          </div>
+        `;
+        return;
+      }
+
+      list.forEach(card => {
+        const item = document.createElement('div');
+        item.className = 'cursor-pointer hover:border-slate-500 transition';
+        item.onclick = () => openCardInspector(card.id);
+
+        if (card.isGraded) {
+          item.innerHTML = buildTextSlabHtml(card, 'normal');
+        } else {
+          item.innerHTML = buildTextDossierCardHtml(card, 'normal');
+        }
+        grid.appendChild(item);
+      });
+    }
+
+    function renderSetCompletionPills() {
+      const container = document.getElementById('setCompletionGrid');
+      container.innerHTML = '';
+      CARD_SETS.forEach(set => {
+        const unique = new Set(state.collection.filter(c => c.setName === set.name).map(c => c.name)).size;
+        const total = set.cardPool.length;
+        const pct = Math.round((unique / total) * 100);
+
+        const pill = document.createElement('div');
+        pill.className = 'bg-term-panel border border-slate-800 p-1.5 rounded font-mono';
+        pill.innerHTML = `
+          <div class="flex justify-between text-slate-400">
+            <span class="truncate">${set.name}</span>
+            <span class="text-amber-400">${pct}%</span>
+          </div>
+          <div class="w-full bg-slate-900 h-1 rounded mt-1 overflow-hidden">
+            <div class="bg-amber-400 h-full" style="width: ${pct}%"></div>
+          </div>
+        `;
+        container.appendChild(pill);
+      });
+    }
+
+    /* =========================================================================
+       VIEW 3: AUTHENTICATION LAB
+       ========================================================================= */
+    function renderGradingView() {
+      const grid = document.getElementById('slabsGrid');
+      grid.innerHTML = '';
+
+      const gradedList = state.collection.filter(c => c.isGraded);
+      if (gradedList.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-full py-12 text-center text-slate-500 font-mono text-xs border border-dashed border-slate-800 rounded-xl">
+            // No encapsulated slabs. Tap any card in your Binder to submit for grading.
+          </div>
+        `;
+        return;
+      }
+
+      gradedList.forEach(card => {
+        const item = document.createElement('div');
+        item.className = 'cursor-pointer hover:border-slate-500 transition';
+        item.onclick = () => openCardInspector(card.id);
+        item.innerHTML = buildTextSlabHtml(card, 'normal');
+        grid.appendChild(item);
+      });
+    }
+
+    /* =========================================================================
+       CARD INSPECTOR & GRADING
+       ========================================================================= */
+    let inspectedCardId = null;
+
+    function openCardInspector(cardId) {
+      const card = state.collection.find(c => c.id === cardId);
+      if (!card) return;
+      inspectedCardId = cardId;
+
+      const is1st = card.edition === '1st Edition';
+      document.getElementById('insSetExp').textContent = `${card.setName.toUpperCase()} ${is1st ? '• 1ST EDITION' : '• UNLIMITED'}`;
+      document.getElementById('insName').textContent = `${card.name} #${card.num}`;
+      document.getElementById('insClass').textContent = `${card.rarity} • ${card.type} • ${card.genus}`;
+
+      document.getElementById('subCenterVal').textContent = `${card.subgrades.centering.toFixed(1)} / 10`;
+      document.getElementById('subEdgeVal').textContent = `${card.subgrades.edges.toFixed(1)} / 10`;
+      document.getElementById('subCornerVal').textContent = `${card.subgrades.corners.toFixed(1)} / 10`;
+      document.getElementById('subSurfaceVal').textContent = `${card.subgrades.surface.toFixed(1)} / 10`;
+
+      const val = getCardValuation(card);
+      document.getElementById('insValue').textContent = `$${val.toFixed(2)}`;
+
+      const statusTag = document.getElementById('insStatusTag');
+      const rawActions = document.getElementById('insRawActions');
+      const multBadge = document.getElementById('insMultiplierBadge');
+      const visualZone = document.getElementById('inspectVisualZone');
+
+      if (card.isGraded) {
+        statusTag.textContent = `AUTHENTICATED (${card.grade})`;
+        statusTag.className = 'text-amber-400 font-bold';
+        rawActions.classList.add('hidden');
+        multBadge.classList.remove('hidden');
+        visualZone.innerHTML = buildTextSlabHtml(card, 'large');
+      } else {
+        statusTag.textContent = is1st ? 'RAW 1ST EDITION' : 'RAW SPECIMEN';
+        statusTag.className = is1st ? 'text-amber-300 font-bold' : 'text-term-emerald font-bold';
+        rawActions.classList.remove('hidden');
+        multBadge.classList.add('hidden');
+        visualZone.innerHTML = buildTextDossierCardHtml(card, 'large');
+      }
+
+      document.getElementById('modalInspect').classList.remove('hidden');
+      audio.beep(420, 'sine', 0.04);
+    }
+
+    function closeInspectModal() {
+      document.getElementById('modalInspect').classList.add('hidden');
+      inspectedCardId = null;
+    }
+
+    function executeGrading(tier) {
+      const card = state.collection.find(c => c.id === inspectedCardId);
+      if (!card || card.isGraded) return;
+
+      const fee = tier === 'economy' ? 15.00 : 35.00;
+      if (state.balance < fee) {
+        showToast('INSUFFICIENT FUNDS', `Fee is $${fee.toFixed(2)}.`, 'warning');
+        return;
+      }
+
+      state.balance -= fee;
+
+      let grade = state.godMode.forceMint10 ? 10.0 : card.potentialGrade;
+      if (!state.godMode.forceMint10 && tier === 'express' && Math.random() < 0.25) {
+        grade = Math.min(10, grade + 0.5);
+      }
+
+      card.isGraded = true;
+      card.gradeTier = tier;
+      card.grade = grade;
+      card.certNum = Math.floor(10000000 + Math.random() * 90000000).toString();
+
+      saveState();
+      audio.playHammer();
+
+      if (grade === 10) {
+        audio.playHolo();
+        showToast('GEM MINT 10!', `${card.name} awarded pristine grade 10!`, 'gem');
+      } else {
+        showToast('SLAB ENCAPSULATED', `${card.name} graded at ${grade}.`, 'check');
+      }
+
+      openCardInspector(card.id);
+      renderBinderView();
+      renderGradingView();
+    }
+
+    function instantLiquidateInspected() {
+      const idx = state.collection.findIndex(c => c.id === inspectedCardId);
+      if (idx === -1) return;
+      const card = state.collection[idx];
+      const payout = getCardValuation(card);
+
+      state.balance += payout;
+      if (payout > state.topSale) state.topSale = payout;
+
+      state.ledger.unshift({
+        time: new Date().toLocaleTimeString(),
+        name: `${card.name} ${card.edition === '1st Edition' ? '(1st)' : ''}`,
+        setName: card.setName,
+        grade: card.isGraded ? `PSA ${card.grade}` : 'Raw',
+        amount: payout
+      });
+
+      state.collection.splice(idx, 1);
+      saveState();
+      audio.playCash();
+
+      showToast('RECORD LIQUIDATED', `Sold for $${payout.toFixed(2)} cash.`, 'dollar');
+      closeInspectModal();
+      renderBinderView();
+      renderGradingView();
+      renderLedgerView();
+    }
+
+    function queueForAuctionFromInspect() {
+      const id = inspectedCardId;
+      closeInspectModal();
+      navigateTab('auction');
+      openLanePickerForCard(id);
+    }
+
+    /* =========================================================================
+       VIEW 4: 3-LANE CONCURRENT LIVE AUCTION FLOOR
+       ========================================================================= */
+    const auctionLanes = [
+      { id: 0, name: 'LANE A: FLOOR', active: false, card: null, currentBid: 0, highBidder: '', timer: null, secondsLeft: 0, mult: 1.0 },
+      { id: 1, name: 'LANE B: VAULT', active: false, card: null, currentBid: 0, highBidder: '', timer: null, secondsLeft: 0, mult: 1.4 },
+      { id: 2, name: 'LANE C: HIGH-ROLLER', active: false, card: null, currentBid: 0, highBidder: '', timer: null, secondsLeft: 0, mult: 2.0 }
+    ];
+
+    function renderAuctionFloorView() {
+      let activeCount = 0;
+      auctionLanes.forEach(lane => {
+        if (lane.active) activeCount++;
+      });
+      document.getElementById('auctionActiveCount').textContent = `${activeCount} of 3 Lanes Active`;
+    }
+
+    let pickingLaneIndex = null;
+
+    function openLanePicker(laneIdx) {
+      if (auctionLanes[laneIdx].active) {
+        showToast('LANE BUSY', 'Wait for auction to resolve.', 'warning');
+        return;
+      }
+      pickingLaneIndex = laneIdx;
+      const container = document.getElementById('lanePickerItems');
+      container.innerHTML = '';
+
+      // Exclude cards currently in any other active lane
+      const activeIds = auctionLanes.filter(l => l.active && l.card).map(l => l.card.id);
+      const available = state.collection.filter(c => !activeIds.includes(c.id));
+
+      if (available.length === 0) {
+        container.innerHTML = `<div class="text-slate-500 text-xs text-center py-6">// No available cards in binder to list.</div>`;
+      } else {
+        available.forEach(card => {
+          const item = document.createElement('div');
+          item.className = 'bg-slate-900 border border-slate-800 hover:border-term-cyan p-2.5 rounded flex justify-between items-center text-xs font-mono cursor-pointer transition';
+          item.onclick = () => {
+            closeLanePicker();
+            startLaneAuction(pickingLaneIndex, card);
+          };
+          item.innerHTML = `
+            <div>
+              <div class="text-white font-bold truncate max-w-[160px]">${card.name}</div>
+              <div class="text-[9px] text-slate-500">${card.setName} • ${card.isGraded ? `GRADE ${card.grade}` : 'RAW'} ${card.edition === '1st Edition' ? '• 1ST' : ''}</div>
+            </div>
+            <div class="text-right">
+              <span class="text-term-emerald font-bold">$${getCardValuation(card).toFixed(2)}</span>
+            </div>
+          `;
+          container.appendChild(item);
+        });
+      }
+
+      document.getElementById('lanePickerTitle').textContent = `ASSIGN LOT TO LANE ${String.fromCharCode(65 + laneIdx)}`;
+      document.getElementById('modalLanePicker').classList.remove('hidden');
+    }
+
+    function openLanePickerForCard(cardId) {
+      const card = state.collection.find(c => c.id === cardId);
+      if (!card) return;
+      // Find first free lane
+      const freeIdx = auctionLanes.findIndex(l => !l.active);
+      if (freeIdx === -1) {
+        showToast('ALL LANES BUSY', 'All 3 auction lanes are full.', 'warning');
+        return;
+      }
+      startLaneAuction(freeIdx, card);
+    }
+
+    function closeLanePicker() {
+      document.getElementById('modalLanePicker').classList.add('hidden');
+      pickingLaneIndex = null;
+    }
+
+    function startLaneAuction(laneIdx, card) {
+      const lane = auctionLanes[laneIdx];
+      const baseEst = getCardValuation(card);
+      let openingBid = Math.max(1, Math.round(baseEst * 0.45));
+
+      lane.active = true;
+      lane.card = card;
+      lane.currentBid = openingBid;
+      lane.highBidder = 'Opening Reserve';
+      lane.secondsLeft = 11 + Math.floor(Math.random() * 4); // 11 to 14 sec
+
+      // Update UI elements
+      document.getElementById(`lane-btn-${laneIdx}`).disabled = true;
+      document.getElementById(`lane-btn-${laneIdx}`).classList.add('opacity-40');
+      document.getElementById(`lane-btn-${laneIdx}`).textContent = 'BIDDING IN PROGRESS...';
+
+      document.getElementById(`lane-lot-${laneIdx}`).innerHTML = card.isGraded ? buildTextSlabHtml(card, 'normal') : buildTextDossierCardHtml(card, 'normal');
+
+      const log = document.getElementById(`lane-log-${laneIdx}`);
+      log.innerHTML = '';
+      addLaneLog(laneIdx, `// LOT: ${card.name} [Reserve: $${openingBid}]`);
+
+      audio.playHammer();
+      renderAuctionFloorView();
+
+      lane.timer = setInterval(() => {
+        lane.secondsLeft -= 1;
+        document.getElementById(`lane-timer-${laneIdx}`).textContent = `T-0${lane.secondsLeft}s`;
+
+        // AI Bidder logic
+        if (Math.random() < 0.7 && lane.secondsLeft > 1) {
+          const bidderObj = AUCTION_BIDDERS[Math.floor(Math.random() * AUCTION_BIDDERS.length)];
+          const increment = Math.max(2, Math.round(baseEst * (0.08 + Math.random() * 0.2) * lane.mult));
+          lane.currentBid += increment;
+          lane.highBidder = bidderObj.name;
+
+          audio.beep(550 + Math.random() * 250, 'sine', 0.03);
+          addLaneLog(laneIdx, `>> $${lane.currentBid.toFixed(2)} [${bidderObj.name}]`);
+        }
+
+        if (lane.secondsLeft <= 0) {
+          finalizeLaneAuction(laneIdx);
+        }
+      }, 1000);
+    }
+
+    function addLaneLog(laneIdx, msg) {
+      const log = document.getElementById(`lane-log-${laneIdx}`);
+      const line = document.createElement('div');
+      line.textContent = msg;
+      log.appendChild(line);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function finalizeLaneAuction(laneIdx) {
+      const lane = auctionLanes[laneIdx];
+      clearInterval(lane.timer);
+      lane.timer = null;
+
+      const cardIdx = state.collection.findIndex(c => c.id === lane.card.id);
+      if (cardIdx !== -1) {
+        state.collection.splice(cardIdx, 1);
+      }
+
+      state.balance += lane.currentBid;
+      if (lane.currentBid > state.topSale) state.topSale = lane.currentBid;
+
+      state.ledger.unshift({
+        time: new Date().toLocaleTimeString(),
+        name: `${lane.card.name} ${lane.card.edition === '1st Edition' ? '(1st)' : ''}`,
+        setName: lane.card.setName,
+        grade: lane.card.isGraded ? `PSA ${lane.card.grade}` : 'Raw',
+        amount: lane.currentBid
+      });
+
+      saveState();
+      audio.playHammer();
+      setTimeout(() => audio.playCash(), 150);
+
+      addLaneLog(laneIdx, `*** SOLD: $${lane.currentBid.toFixed(2)} to ${lane.highBidder} ***`);
+      document.getElementById(`lane-timer-${laneIdx}`).textContent = 'SETTLED';
+
+      const btn = document.getElementById(`lane-btn-${laneIdx}`);
+      btn.disabled = false;
+      btn.classList.remove('opacity-40');
+      btn.textContent = `LIST IN LANE ${String.fromCharCode(65 + laneIdx)}`;
+
+      showToast(`LANE ${String.fromCharCode(65 + laneIdx)} SOLD`, `Settled for $${lane.currentBid.toFixed(2)}!`, 'dollar');
+
+      lane.active = false;
+      renderAuctionFloorView();
+      renderBinderView();
+    }
+
+    /* =========================================================================
+       VIEW 5: SETTLEMENT LEDGER
+       ========================================================================= */
+    function renderLedgerView() {
+      const countEl = document.getElementById('ledgerCount');
+      const body = document.getElementById('ledgerTableBody');
+      countEl.textContent = `${state.ledger.length} Settlements`;
+
+      if (state.ledger.length === 0) {
+        body.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-slate-600 italic">No ledger entries.</td></tr>`;
+        return;
+      }
+
+      body.innerHTML = '';
+      state.ledger.slice(0, 30).forEach(entry => {
+        const row = document.createElement('tr');
+        row.className = 'border-b border-slate-800/60 hover:bg-slate-900/40';
+        row.innerHTML = `
+          <td class="py-2 px-2 text-slate-500">${entry.time}</td>
+          <td class="py-2 px-2 font-bold text-white truncate max-w-[120px]">${entry.name}</td>
+          <td class="py-2 px-2 text-slate-400">${entry.setName}</td>
+          <td class="py-2 px-2 text-amber-400">${entry.grade}</td>
+          <td class="py-2 px-2 text-right font-bold text-term-emerald">+$${entry.amount.toFixed(2)}</td>
+        `;
+        body.appendChild(row);
+      });
+    }
+
+    /* =========================================================================
+       VIEW 6: GOD MODE MATRIX & CHEATS
+       ========================================================================= */
+    function renderGodView() {
+      const statusEl = document.getElementById('godAuto10Status');
+      if (state.godMode.forceMint10) {
+        statusEl.textContent = '[ACTIVE: 10.0 PRISTINE]';
+        statusEl.className = 'text-amber-400 font-bold';
+      } else {
+        statusEl.textContent = '[OFF]';
+        statusEl.className = 'text-slate-500 font-bold';
+      }
+    }
+
+    function godAddCash(amount) {
+      state.balance += amount;
+      saveState();
+      audio.playCash();
+      showToast('GOD MODE CAPITAL', `Injected +$${amount.toLocaleString()} into reserves.`, 'dollar');
+      renderGodView();
+    }
+
+    function godToggleAuto10() {
+      state.godMode.forceMint10 = !state.godMode.forceMint10;
+      saveState();
+      audio.beep(state.godMode.forceMint10 ? 880 : 300, 'triangle', 0.1);
+      showToast('GOD MODE TELEMETRY', `Force Gem Mint 10: ${state.godMode.forceMint10 ? 'ENABLED' : 'DISABLED'}`);
+      renderGodView();
+    }
+
+    function godSpawnGrail(type) {
+      let card = null;
+      if (type === 'charizard') {
+        card = {
+          id: 'grail_' + Date.now(),
+          name: 'Charizard',
+          setName: 'Base Set',
+          edition: '1st Edition',
+          num: '4/102',
+          rarity: 'Holo Rare',
+          type: 'Fire',
+          hp: 120,
+          baseVal: 340.00,
+          genus: 'Flame Apex Organism',
+          notes: 'Spits fires hot enough to melt boulders. Holy Grail First Edition specimen.',
+          subgrades: { centering: 10.0, edges: 10.0, corners: 10.0, surface: 10.0 },
+          potentialGrade: 10.0,
+          isGraded: true,
+          gradeTier: 'express',
+          grade: 10.0,
+          certNum: '00000001'
+        };
+      } else if (type === 'lugia') {
+        card = {
+          id: 'grail_' + Date.now(),
+          name: 'Lugia',
+          setName: 'Neo Genesis',
+          edition: '1st Edition',
+          num: '9/111',
+          rarity: 'Holo Rare',
+          type: 'Colorless',
+          hp: 90,
+          baseVal: 380.00,
+          genus: 'Deep Ocean Tempest Beast',
+          notes: 'Deep ocean master specimen in flawless condition. First Edition Pristine.',
+          subgrades: { centering: 10.0, edges: 10.0, corners: 10.0, surface: 10.0 },
+          potentialGrade: 10.0,
+          isGraded: true,
+          gradeTier: 'express',
+          grade: 10.0,
+          certNum: '00000002'
+        };
+      }
+
+      if (card) {
+        state.collection.unshift(card);
+        saveState();
+        audio.playHolo();
+        showToast('HOLY GRAIL SPAWNED', `★ 1st Edition PSA 10 ${card.name} placed in Binder!`, 'gem');
+        renderBinderView();
+        renderGradingView();
+      }
+    }
+
+    function godSpawnGodPack() {
+      const allHolos = [];
+      CARD_SETS.forEach(s => {
+        s.cardPool.filter(c => c.rarity.includes('Holo') || c.rarity.includes('Secret')).forEach(h => {
+          allHolos.push({ ...h, setName: s.name });
+        });
+      });
+
+      for (let i = 0; i < 10; i++) {
+        const raw = allHolos[Math.floor(Math.random() * allHolos.length)];
+        state.collection.push({
+          id: 'godpack_' + Date.now() + '_' + i,
+          name: raw.name,
+          setName: raw.setName,
+          edition: '1st Edition',
+          num: raw.num,
+          rarity: raw.rarity,
+          type: raw.type,
+          hp: raw.hp,
+          baseVal: raw.baseVal,
+          genus: raw.genus,
+          notes: raw.notes,
+          subgrades: { centering: 10.0, edges: 10.0, corners: 10.0, surface: 10.0 },
+          potentialGrade: 10.0,
+          isGraded: false,
+          gradeTier: null,
+          grade: null,
+          certNum: null
+        });
+      }
+      saveState();
+      audio.playHolo();
+      showToast('GOD PACK SPAWNED', '10x 1st Edition Holo Rares added to Binder!', 'gem');
+      renderBinderView();
+    }
+
+    function godInstantFinishAuctions() {
+      let finished = 0;
+      auctionLanes.forEach((lane, idx) => {
+        if (lane.active) {
+          lane.secondsLeft = 1;
+          finished++;
+        }
+      });
+      if (finished > 0) {
+        showToast('ACCELERATING LANES', `${finished} lanes concluding immediately.`, 'bolt');
+      } else {
+        showToast('NO ACTIVE LANES', 'Start an auction in Lane A, B, or C first.', 'warning');
+      }
+    }
+
+    function confirmReset() {
+      state = {
+        balance: 150.00,
+        packsOpened: 0,
+        topSale: 0.00,
+        collection: [],
+        ledger: [],
+        godMode: { forceMint10: false }
+      };
+      saveState();
+      navigateTab('shop');
+      renderAllViews();
+      showToast('DATA WIPED', 'Balance reset to $150.00.', 'check');
+    }
+
+    /* =========================================================================
+       TOAST FEEDBACK HELPER
+       ========================================================================= */
+    let toastTimer = null;
+    function showToast(head, body, type = 'info') {
+      const el = document.getElementById('toastBox');
+      document.getElementById('toastHead').textContent = head;
+      document.getElementById('toastBody').textContent = body;
+
+      el.classList.remove('translate-y-32');
+      el.classList.add('translate-y-0');
+
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        el.classList.add('translate-y-32');
+        el.classList.remove('translate-y-0');
+      }, 2800);
+    }
+
+    /* =========================================================================
+       INITIALIZATION
+       ========================================================================= */
+    function renderAllViews() {
+      renderShopView();
+      renderBinderView();
+      renderGradingView();
+      renderAuctionFloorView();
+      renderLedgerView();
+      renderGodView();
+    }
+
+    window.onload = function() {
+      loadState();
+      renderAllViews();
+    };
+  </script>
+</body>
+</html>
